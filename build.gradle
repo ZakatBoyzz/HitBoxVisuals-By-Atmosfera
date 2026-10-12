@@ -13,6 +13,7 @@ repositories {
     maven {
         url = 'https://maven.fabricmc.net/'
     }
+
     mavenCentral()
 }
 
@@ -27,6 +28,7 @@ sourceSets {
     main {
         java {
             srcDirs = ['.']
+
             include 'HitboxConfig.java'
             include 'HitboxRenderer.java'
             include 'HitboxSettingsScreen.java'
@@ -38,20 +40,12 @@ sourceSets {
         }
     }
 }
- 
+
 processResources {
     inputs.property 'version', project.version
 
     from('fabric.mod.json') {
         expand 'version': project.version
-    }
-
-    from('en_us.json') {
-        into 'assets/hitboxvisuals/lang'
-    }
-
-    from('ru_ru.json') {
-        into 'assets/hitboxvisuals/lang'
     }
 }
 
@@ -60,7 +54,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-    withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
 }
