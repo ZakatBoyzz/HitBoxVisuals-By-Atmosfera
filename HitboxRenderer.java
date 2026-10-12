@@ -51,7 +51,7 @@ public final class HitboxRenderer {
                     continue;
                 }
 
-                // Keep the invisible-player filtering fix.
+                // Невидимые игроки без брони не отображаются.
                 boolean invisible = target.isInvisible();
                 boolean wearingArmor = hasAnyArmor(target);
 
@@ -59,7 +59,7 @@ public final class HitboxRenderer {
                     continue;
                 }
 
-                // Do not render hitboxes through fully obstructing blocks.
+                // Не отображаем хитбокс, если игрок полностью закрыт блоками.
                 if (!hasClearViewToAnySample(client, target, cameraPos)) {
                     continue;
                 }
@@ -81,11 +81,10 @@ public final class HitboxRenderer {
                         -cameraPos.z
                 );
 
-                // Draw the fill using the same depth-aware debug layer as before
-                // is intentionally avoided here; use the normal filled-box layer.
+                // Заливка хитбокса.
                 if (settings.fillEnabled) {
                     VertexConsumer fillConsumer =
-                            consumers.getBuffer(RenderLayer.getDebugFilledBox());
+                            consumers.getBuffer(RenderLayer.getDebugQuads());
 
                     float[] rgba = rgba(fill);
 
@@ -98,6 +97,7 @@ public final class HitboxRenderer {
                     );
                 }
 
+                // Контур хитбокса.
                 VertexConsumer lineConsumer =
                         consumers.getBuffer(RenderLayer.getLines());
 
