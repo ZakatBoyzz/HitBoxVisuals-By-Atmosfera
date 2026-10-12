@@ -22,57 +22,93 @@ public final class HitboxRenderer {
     public static void render(WorldRenderContext context) {
         HitboxConfig.Settings settings = HitboxConfig.SETTINGS;
         MinecraftClient client = MinecraftClient.getInstance();
-        if (!settings.enabled || client.player == null || context.world() == null) return;
+
+        if (!settings.enabled || client.player == null || context.world() == null) {
+            return;
+        }
 
         MatrixStack matrices = context.matrixStack();
         VertexConsumerProvider consumers = context.consumers();
-        if (matrices == null || consumers == null) return;
+
+        if (matrices == null || consumers == null) {
+            return;
+        }
 
         Vec3d cameraPos = context.camera().getPos();
         PlayerEntity hovered = null;
         HitResult crosshair = client.crosshairTarget;
-        if (settings.hoverEnabled && crosshair instanceof EntityHitResult entityHit
+
+        if (settings.hoverEnabled
+                && crosshair instanceof EntityHitResult entityHit
                 && entityHit.getEntity() instanceof PlayerEntity playerHit) {
             hovered = playerHit;
         }
 
         matrices.push();
+
         try {
             for (PlayerEntity target : context.world().getPlayers()) {
-                if (target == client.player || !target.isAlive()) continue;
+                if (target == client.player || !target.isAlive()) {
+                    continue;
+                }
 
-                boolean invisible = target.hasStatusEffect(StatusEffects.INVISIBILITY);
+                // Hide invisible players unless at least one armor slot is occupied.
+                boolean invisible = target.isInvisible();
                 boolean wearingArmor = hasAnyArmor(target);
 
-                // Invisible players with no equipped armor are never rendered, under any condition.
-                if (invisible && !wearingArmor) continue;
+                if (invisible && !wearingArmor) {
+                    continue;
+                }
 
-                // Explicit block ray checks are intentional: even if a renderer or shader changes
-                // depth behavior, a fully occluded player must not receive a hitbox overlay.
-                if (!hasClearViewToAnySample(client, target, cameraPos)) continue;
+                // Never draw a hitbox when blocks completely obstruct the view.
+                if (!hasClearViewToAnySample(client, target, cameraPos)) {
+                    continue;
+                }
 
                 boolean isHovered = target == hovered;
-                int outline = isHovered ? settings.hoverOutlineColor : settings.outlineColor;
-                int fill = withAlpha(isHovered ? settings.hoverFillColor : settings.fillColor, settings.fillAlpha);
 
-                Box box = target.getBoundingBox().offset(-cameraPos.x, -cameraPos.y, -cameraPos.z);
-if (settings.fillEnabled) {
-    VertexConsumer fillConsumer = consumers.getBuffer(RenderLayer.getDebugFilledBox());
-    float[] rgba = rgba(fill);
+                int outline = isHovered
+                        ? settings.hoverOutlineColor
+                        : settings.outlineColor;
 
-    VertexRendering.drawFilledBox(
-            matrices,
-            fillConsumer,
-            box.minX, box.minY, box.minZ,
-            box.maxX, box.maxY, box.maxZ,
-            rgba[0], rgba[1], rgba[2], rgba[3]
-    );
-}
+                int fill = withAlpha(
+                        isHovered ? settings.hoverFillColor : settings.fillColor,
+                        settings.fillAlpha
+                );
 
-                VertexConsumer lineConsumer = consumers.getBuffer(RenderLayer.getLines());
+                Box box = target.getBoundingBox().offset(
+                        -cameraPos.x,
+                        -cameraPos.y,
+                        -cameraPos.z
+                );
+
+                // Draw only the hitbox overlay; do not change player-model rendering.
+                if (settings.fillEnabled) {
+                    VertexConsumer fillConsumer =
+                            consumers.getBuffer(RenderLayer.getDebugFilledBox());
+
+                    float[] rgba = rgba(fill);
+
+                    VertexRendering.drawFilledBox(
+                            matrices,
+                            fillConsumer,
+                            box.minX, box.minY, box.minZ,
+                            box.maxX, box.maxY, box.maxZ,
+                            rgba[0], rgba[1], rgba[2], rgba[3]
+                    );
+                }
+
+                VertexConsumer lineConsumer =
+                        consumers.getBuffer(RenderLayer.getLines());
+
                 float[] line = rgba(outline);
-                VertexRendering.drawBox(matrices, lineConsumer, box,
-                        line[0], line[1], line[2], line[3]);
+
+                VertexRendering.drawBox(
+                        matrices,
+                        lineConsumer,
+                        box,
+                        line[0], line[1], line[2], line[3]
+                );
             }
         } finally {
             matrices.pop();
@@ -86,12 +122,17 @@ if (settings.fillEnabled) {
                 || !player.getEquippedStack(EquipmentSlot.FEET).isEmpty();
     }
 
-    private static boolean hasClearViewToAnySample(MinecraftClient client, PlayerEntity target, Vec3d camera) {
-        // Check multiple points so an exposed part of a player can still be seen around a corner.
+    private static boolean hasClearViewToAnySample(
+            MinecraftClient client,
+            PlayerEntity target,
+            Vec3d camera
+    ) {
         Box b = target.getBoundingBox();
+
         double midX = (b.minX + b.maxX) * 0.5;
         double midY = (b.minY + b.maxY) * 0.5;
         double midZ = (b.minZ + b.maxZ) * 0.5;
+
         Vec3d[] points = new Vec3d[] {
                 new Vec3d(midX, b.minY + 0.12, midZ),
                 new Vec3d(midX, midY, midZ),
@@ -104,19 +145,27 @@ if (settings.fillEnabled) {
         };
 
         for (Vec3d point : points) {
-            HitResult result = client.world.raycast(new RaycastContext(
-                    camera, point,
-                    RaycastContext.ShapeType.VISUAL,
-                    RaycastContext.FluidHandling.NONE,
-                    client.player
-            ));
-            if (result.getType() == HitResult.Type.MISS) return true;
+            HitResult result = client.world.raycast(
+                    new RaycastContext(
+                            camera,
+                            point,
+                            RaycastContext.ShapeType.VISUAL,
+                            RaycastContext.FluidHandling.NONE,
+                            client.player
+                    )
+            );
+
+            if (result.getType() == HitResult.Type.MISS) {
+                return true;
+            }
         }
+
         return false;
     }
 
     private static int withAlpha(int argb, int alpha) {
-        return (Math.max(0, Math.min(255, alpha)) << 24) | (argb & 0x00FFFFFF);
+        return (Math.max(0, Math.min(255, alpha)) << 24)
+                | (argb & 0x00FFFFFF);
     }
 
     private static float[] rgba(int argb) {
