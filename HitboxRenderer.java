@@ -56,13 +56,18 @@ public final class HitboxRenderer {
                 int fill = withAlpha(isHovered ? settings.hoverFillColor : settings.fillColor, settings.fillAlpha);
 
                 Box box = target.getBoundingBox().offset(-cameraPos.x, -cameraPos.y, -cameraPos.z);
-                if (settings.fillEnabled) {
-                    VertexConsumer fillConsumer = consumers.getBuffer(RenderLayer.getDebugFilledBox());
-                    float[] rgba = rgba(fill);
-                    VertexRendering.drawFilledBox(matrices, fillConsumer,
-                            box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ,
-                            rgba[0], rgba[1], rgba[2], rgba[3]);
-                }
+if (settings.fillEnabled) {
+    VertexConsumer fillConsumer = consumers.getBuffer(RenderLayer.getDebugFilledBox());
+    float[] rgba = rgba(fill);
+
+    VertexRendering.drawFilledBox(
+            matrices,
+            fillConsumer,
+            box.minX, box.minY, box.minZ,
+            box.maxX, box.maxY, box.maxZ,
+            rgba[0], rgba[1], rgba[2], rgba[3]
+    );
+}
 
                 VertexConsumer lineConsumer = consumers.getBuffer(RenderLayer.getLines());
                 float[] line = rgba(outline);
