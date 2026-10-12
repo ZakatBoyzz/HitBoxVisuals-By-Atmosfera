@@ -1,14 +1,10 @@
 package com.wwoqkx.hitboxvisuals;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gl.ShaderProgramKeys;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.VertexFormat;
-import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.VertexRendering;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EquipmentSlot;
@@ -22,43 +18,10 @@ import net.minecraft.world.RaycastContext;
 public final class HitboxRenderer {
     private HitboxRenderer() {}
 
-    /*
-     * Custom layer:
-     * - enables alpha blending;
-     * - keeps depth testing enabled;
-     * - disables depth writes;
-     * - uses the position-color shader.
-     *
-     * The fill must be rendered BEFORE player models.
-     */
-    private static final RenderLayer FILL_LAYER = new RenderLayer(
-            "hitboxvisuals:fill",
-            VertexFormats.POSITION_COLOR,
-            VertexFormat.DrawMode.QUADS,
-            256,
-            false,
-            true,
-            () -> {
-                RenderSystem.enableBlend();
-                RenderSystem.defaultBlendFunc();
-                RenderSystem.enableDepthTest();
-                RenderSystem.depthMask(false);
-                RenderSystem.disableCull();
-RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
-            },
-            () -> {
-                RenderSystem.depthMask(true);
-                RenderSystem.disableBlend();
-                RenderSystem.enableCull();
-            }
-    ) {};
-
-    // Called BEFORE player entities are rendered.
     public static void renderFill(WorldRenderContext context) {
         render(context, true, false);
     }
 
-    // Called AFTER player entities are rendered.
     public static void renderOutline(WorldRenderContext context) {
         render(context, false, true);
     }
@@ -73,7 +36,7 @@ RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
 
         if (!settings.enabled
                 || client.player == null
-                || context.world() == null) {
+                || client.world == null) {
             return;
         }
 
@@ -104,14 +67,12 @@ RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
                     continue;
                 }
 
-                // Invisible players without armor stay hidden.
-                boolean invisible = target.isInvisible();
-
-                if (invisible && !hasAnyArmor(target)) {
+                // Invisible players without armor remain hidden.
+                if (target.isInvisible() && !hasAnyArmor(target)) {
                     continue;
                 }
 
-                // Keep the stable interpolated hitbox position.
+                // Interpolated position prevents hitbox jitter.
                 Vec3d interpolatedPos = target.getLerpedPos(tickDelta);
 
                 double offsetX =
@@ -127,13 +88,14 @@ RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
                         offsetZ
                 );
 
-                // Do not render through obstructing blocks.
+                // Never render through obstructing blocks.
                 if (!hasClearViewToAnySample(client, box, cameraPos)) {
                     continue;
                 }
 
                 boolean isHovered = target == hovered;
 
+                // Fill is drawn BEFORE player models.
                 if (drawFill && settings.fillEnabled) {
                     int fillColor = withAlpha(
                             isHovered
@@ -145,7 +107,7 @@ RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
                     float[] color = rgba(fillColor);
 
                     VertexConsumer consumer =
-                            consumers.getBuffer(FILL_LAYER);
+                            consumers.getBuffer(RenderLayer.getDebugQuads());
 
                     VertexRendering.drawFilledBox(
                             matrices,
@@ -163,6 +125,7 @@ RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
                     );
                 }
 
+                // Outline is drawn AFTER player models.
                 if (drawOutline) {
                     int outlineColor = isHovered
                             ? settings.hoverOutlineColor
@@ -188,13 +151,11 @@ RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
             matrices.pop();
         }
 
-        /*
-         * Flush the fill immediately.
-         * This ensures it is drawn before entity models.
-         */
-        if (drawFill && settings.fillEnabled
+        // Flush the fill before Minecraft renders player models.
+        if (drawFill
+                && settings.fillEnabled
                 && consumers instanceof VertexConsumerProvider.Immediate immediate) {
-            immediate.draw(FILL_LAYER);
+            immediate.draw(RenderLayer.getDebugQuads());
         }
     }
 
