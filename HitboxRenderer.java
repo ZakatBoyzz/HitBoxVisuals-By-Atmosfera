@@ -1,10 +1,14 @@
 package com.wwoqkx.hitboxvisuals;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.VertexFormat;
+import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.VertexRendering;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EquipmentSlot;
@@ -18,11 +22,60 @@ import net.minecraft.world.RaycastContext;
 public final class HitboxRenderer {
     private HitboxRenderer() {}
 
-    public static void render(WorldRenderContext context) {
+    /*
+     * Custom layer:
+     * - enables alpha blending;
+     * - keeps depth testing enabled;
+     * - disables depth writes;
+     * - uses the position-color shader.
+     *
+     * The fill must be rendered BEFORE player models.
+     */
+    private static final RenderLayer FILL_LAYER = new RenderLayer(
+            "hitboxvisuals:fill",
+            VertexFormats.POSITION_COLOR,
+            VertexFormat.DrawMode.QUADS,
+            256,
+            false,
+            true,
+            () -> {
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthMask(false);
+                RenderSystem.disableCull();
+                RenderSystem.setShader(
+                        GameRenderer::getPositionColorProgram
+                );
+            },
+            () -> {
+                RenderSystem.depthMask(true);
+                RenderSystem.disableBlend();
+                RenderSystem.enableCull();
+            }
+    ) {};
+
+    // Called BEFORE player entities are rendered.
+    public static void renderFill(WorldRenderContext context) {
+        render(context, true, false);
+    }
+
+    // Called AFTER player entities are rendered.
+    public static void renderOutline(WorldRenderContext context) {
+        render(context, false, true);
+    }
+
+    private static void render(
+            WorldRenderContext context,
+            boolean drawFill,
+            boolean drawOutline
+    ) {
         HitboxConfig.Settings settings = HitboxConfig.SETTINGS;
         MinecraftClient client = MinecraftClient.getInstance();
 
-        if (!settings.enabled || client.player == null || context.world() == null) {
+        if (!settings.enabled
+                || client.player == null
+                || context.world() == null) {
             return;
         }
 
@@ -34,8 +87,6 @@ public final class HitboxRenderer {
         }
 
         Vec3d cameraPos = context.camera().getPos();
-
-        // Interpolate player positions between game ticks.
         float tickDelta = context.tickCounter().getTickDelta(false);
 
         PlayerEntity hovered = null;
@@ -55,16 +106,14 @@ public final class HitboxRenderer {
                     continue;
                 }
 
-                // Preserve the invisible-player fix.
+                // Invisible players without armor stay hidden.
                 boolean invisible = target.isInvisible();
-                boolean wearingArmor = hasAnyArmor(target);
 
-                if (invisible && !wearingArmor) {
+                if (invisible && !hasAnyArmor(target)) {
                     continue;
                 }
 
-                // Interpolated position prevents the hitbox from jumping
-                // between discrete entity positions while the player runs.
+                // Keep the stable interpolated hitbox position.
                 Vec3d interpolatedPos = target.getLerpedPos(tickDelta);
 
                 double offsetX =
@@ -80,53 +129,74 @@ public final class HitboxRenderer {
                         offsetZ
                 );
 
-                // Keep hitboxes from appearing through obstructing blocks.
+                // Do not render through obstructing blocks.
                 if (!hasClearViewToAnySample(client, box, cameraPos)) {
                     continue;
                 }
 
                 boolean isHovered = target == hovered;
 
-                int outline = isHovered
-                        ? settings.hoverOutlineColor
-                        : settings.outlineColor;
+                if (drawFill && settings.fillEnabled) {
+                    int fillColor = withAlpha(
+                            isHovered
+                                    ? settings.hoverFillColor
+                                    : settings.fillColor,
+                            settings.fillAlpha
+                    );
 
-                int fill = withAlpha(
-                        isHovered ? settings.hoverFillColor : settings.fillColor,
-                        settings.fillAlpha
-                );
+                    float[] color = rgba(fillColor);
 
-                // Filled hitbox.
-                if (settings.fillEnabled) {
-                    VertexConsumer fillConsumer =
-                            consumers.getBuffer(RenderLayer.getDebugFilledBox());
-
-                    float[] rgba = rgba(fill);
+                    VertexConsumer consumer =
+                            consumers.getBuffer(FILL_LAYER);
 
                     VertexRendering.drawFilledBox(
                             matrices,
-                            fillConsumer,
-                            box.minX, box.minY, box.minZ,
-                            box.maxX, box.maxY, box.maxZ,
-                            rgba[0], rgba[1], rgba[2], rgba[3]
+                            consumer,
+                            box.minX,
+                            box.minY,
+                            box.minZ,
+                            box.maxX,
+                            box.maxY,
+                            box.maxZ,
+                            color[0],
+                            color[1],
+                            color[2],
+                            color[3]
                     );
                 }
 
-                // Hitbox outline.
-                VertexConsumer lineConsumer =
-                        consumers.getBuffer(RenderLayer.getLines());
+                if (drawOutline) {
+                    int outlineColor = isHovered
+                            ? settings.hoverOutlineColor
+                            : settings.outlineColor;
 
-                float[] line = rgba(outline);
+                    float[] color = rgba(outlineColor);
 
-                VertexRendering.drawBox(
-                        matrices,
-                        lineConsumer,
-                        box,
-                        line[0], line[1], line[2], line[3]
-                );
+                    VertexConsumer consumer =
+                            consumers.getBuffer(RenderLayer.getLines());
+
+                    VertexRendering.drawBox(
+                            matrices,
+                            consumer,
+                            box,
+                            color[0],
+                            color[1],
+                            color[2],
+                            color[3]
+                    );
+                }
             }
         } finally {
             matrices.pop();
+        }
+
+        /*
+         * Flush the fill immediately.
+         * This ensures it is drawn before entity models.
+         */
+        if (drawFill && settings.fillEnabled
+                && consumers instanceof VertexConsumerProvider.Immediate immediate) {
+            immediate.draw(FILL_LAYER);
         }
     }
 
@@ -142,22 +212,36 @@ public final class HitboxRenderer {
             Box box,
             Vec3d camera
     ) {
-        // Convert the camera-relative box back to world coordinates
-        // for raycasting against blocks.
         Box worldBox = box.offset(camera.x, camera.y, camera.z);
 
         double midX = (worldBox.minX + worldBox.maxX) * 0.5;
         double midY = (worldBox.minY + worldBox.maxY) * 0.5;
         double midZ = (worldBox.minZ + worldBox.maxZ) * 0.5;
 
-        Vec3d[] points = new Vec3d[] {
+        Vec3d[] points = {
                 new Vec3d(midX, worldBox.minY + 0.12, midZ),
                 new Vec3d(midX, midY, midZ),
                 new Vec3d(midX, worldBox.maxY - 0.12, midZ),
-                new Vec3d(worldBox.minX + 0.03, midY, worldBox.minZ + 0.03),
-                new Vec3d(worldBox.maxX - 0.03, midY, worldBox.minZ + 0.03),
-                new Vec3d(worldBox.minX + 0.03, midY, worldBox.maxZ - 0.03),
-                new Vec3d(worldBox.maxX - 0.03, midY, worldBox.maxZ - 0.03),
+                new Vec3d(
+                        worldBox.minX + 0.03,
+                        midY,
+                        worldBox.minZ + 0.03
+                ),
+                new Vec3d(
+                        worldBox.maxX - 0.03,
+                        midY,
+                        worldBox.minZ + 0.03
+                ),
+                new Vec3d(
+                        worldBox.minX + 0.03,
+                        midY,
+                        worldBox.maxZ - 0.03
+                ),
+                new Vec3d(
+                        worldBox.maxX - 0.03,
+                        midY,
+                        worldBox.maxZ - 0.03
+                ),
                 new Vec3d(midX, worldBox.maxY - 0.05, midZ)
         };
 
