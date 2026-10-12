@@ -34,6 +34,10 @@ public final class HitboxRenderer {
         }
 
         Vec3d cameraPos = context.camera().getPos();
+
+        // Interpolate player positions between game ticks.
+        float tickDelta = context.tickCounter().getTickDelta(false);
+
         PlayerEntity hovered = null;
         HitResult crosshair = client.crosshairTarget;
 
@@ -51,7 +55,7 @@ public final class HitboxRenderer {
                     continue;
                 }
 
-                // Невидимые игроки без брони не отображаются.
+                // Preserve the invisible-player fix.
                 boolean invisible = target.isInvisible();
                 boolean wearingArmor = hasAnyArmor(target);
 
@@ -59,8 +63,25 @@ public final class HitboxRenderer {
                     continue;
                 }
 
-                // Не отображаем хитбокс, если игрок полностью закрыт блоками.
-                if (!hasClearViewToAnySample(client, target, cameraPos)) {
+                // Interpolated position prevents the hitbox from jumping
+                // between discrete entity positions while the player runs.
+                Vec3d interpolatedPos = target.getLerpedPos(tickDelta);
+
+                double offsetX =
+                        interpolatedPos.x - target.getX() - cameraPos.x;
+                double offsetY =
+                        interpolatedPos.y - target.getY() - cameraPos.y;
+                double offsetZ =
+                        interpolatedPos.z - target.getZ() - cameraPos.z;
+
+                Box box = target.getBoundingBox().offset(
+                        offsetX,
+                        offsetY,
+                        offsetZ
+                );
+
+                // Keep hitboxes from appearing through obstructing blocks.
+                if (!hasClearViewToAnySample(client, box, cameraPos)) {
                     continue;
                 }
 
@@ -75,16 +96,10 @@ public final class HitboxRenderer {
                         settings.fillAlpha
                 );
 
-                Box box = target.getBoundingBox().offset(
-                        -cameraPos.x,
-                        -cameraPos.y,
-                        -cameraPos.z
-                );
-
-                // Заливка хитбокса.
+                // Filled hitbox.
                 if (settings.fillEnabled) {
                     VertexConsumer fillConsumer =
-                            consumers.getBuffer(RenderLayer.getDebugQuads());
+                            consumers.getBuffer(RenderLayer.getDebugFilledBox());
 
                     float[] rgba = rgba(fill);
 
@@ -97,7 +112,7 @@ public final class HitboxRenderer {
                     );
                 }
 
-                // Контур хитбокса.
+                // Hitbox outline.
                 VertexConsumer lineConsumer =
                         consumers.getBuffer(RenderLayer.getLines());
 
@@ -124,24 +139,26 @@ public final class HitboxRenderer {
 
     private static boolean hasClearViewToAnySample(
             MinecraftClient client,
-            PlayerEntity target,
+            Box box,
             Vec3d camera
     ) {
-        Box b = target.getBoundingBox();
+        // Convert the camera-relative box back to world coordinates
+        // for raycasting against blocks.
+        Box worldBox = box.offset(camera.x, camera.y, camera.z);
 
-        double midX = (b.minX + b.maxX) * 0.5;
-        double midY = (b.minY + b.maxY) * 0.5;
-        double midZ = (b.minZ + b.maxZ) * 0.5;
+        double midX = (worldBox.minX + worldBox.maxX) * 0.5;
+        double midY = (worldBox.minY + worldBox.maxY) * 0.5;
+        double midZ = (worldBox.minZ + worldBox.maxZ) * 0.5;
 
         Vec3d[] points = new Vec3d[] {
-                new Vec3d(midX, b.minY + 0.12, midZ),
+                new Vec3d(midX, worldBox.minY + 0.12, midZ),
                 new Vec3d(midX, midY, midZ),
-                new Vec3d(midX, b.maxY - 0.12, midZ),
-                new Vec3d(b.minX + 0.03, midY, b.minZ + 0.03),
-                new Vec3d(b.maxX - 0.03, midY, b.minZ + 0.03),
-                new Vec3d(b.minX + 0.03, midY, b.maxZ - 0.03),
-                new Vec3d(b.maxX - 0.03, midY, b.maxZ - 0.03),
-                new Vec3d(midX, b.maxY - 0.05, midZ)
+                new Vec3d(midX, worldBox.maxY - 0.12, midZ),
+                new Vec3d(worldBox.minX + 0.03, midY, worldBox.minZ + 0.03),
+                new Vec3d(worldBox.maxX - 0.03, midY, worldBox.minZ + 0.03),
+                new Vec3d(worldBox.minX + 0.03, midY, worldBox.maxZ - 0.03),
+                new Vec3d(worldBox.maxX - 0.03, midY, worldBox.maxZ - 0.03),
+                new Vec3d(midX, worldBox.maxY - 0.05, midZ)
         };
 
         for (Vec3d point : points) {
