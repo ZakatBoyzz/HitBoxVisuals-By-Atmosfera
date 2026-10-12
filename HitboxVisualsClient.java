@@ -16,12 +16,14 @@ public final class HitboxVisualsClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         HitboxConfig.load();
+
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.hitboxvisuals.toggle",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_H,
                 "category.hitboxvisuals"
         ));
+
         menuKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.hitboxvisuals.menu",
                 InputUtil.Type.KEYSYM,
@@ -31,9 +33,12 @@ public final class HitboxVisualsClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (toggleKey.wasPressed()) {
-                HitboxConfig.SETTINGS.enabled = !HitboxConfig.SETTINGS.enabled;
+                HitboxConfig.SETTINGS.enabled =
+                        !HitboxConfig.SETTINGS.enabled;
+
                 HitboxConfig.save();
             }
+
             while (menuKey.wasPressed()) {
                 if (client.currentScreen == null) {
                     client.setScreen(new HitboxSettingsScreen());
@@ -41,20 +46,30 @@ public final class HitboxVisualsClient implements ClientModInitializer {
             }
         });
 
-        WorldRenderEvents.AFTER_ENTITIES.register(HitboxRenderer::render);
+        // Fill first: player models render afterward.
+        WorldRenderEvents.BEFORE_ENTITIES.register(
+                HitboxRenderer::renderFill
+        );
+
+        // Outlines remain on top of the player models.
+        WorldRenderEvents.AFTER_ENTITIES.register(
+                HitboxRenderer::renderOutline
+        );
     }
 
     static MinecraftClient client() {
         return MinecraftClient.getInstance();
     }
 
-    /** Current user-selected key shown in the settings screen. */
     public static String toggleKeyLabel() {
-        return toggleKey == null ? "H" : toggleKey.getBoundKeyLocalizedText().getString();
+        return toggleKey == null
+                ? "H"
+                : toggleKey.getBoundKeyLocalizedText().getString();
     }
 
-    /** Current user-selected key shown in the settings screen. */
     public static String menuKeyLabel() {
-        return menuKey == null ? "K" : menuKey.getBoundKeyLocalizedText().getString();
+        return menuKey == null
+                ? "K"
+                : menuKey.getBoundKeyLocalizedText().getString();
     }
 }
