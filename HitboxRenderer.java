@@ -3,7 +3,7 @@ package com.wwoqkx.hitboxvisuals;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.gl.ShaderProgramKeys;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
@@ -44,9 +44,7 @@ public final class HitboxRenderer {
                 RenderSystem.enableDepthTest();
                 RenderSystem.depthMask(false);
                 RenderSystem.disableCull();
-                RenderSystem.setShader(
-                        GameRenderer::getPositionColorProgram
-                );
+RenderSystem.setShader(ShaderProgramKeys.POSITION_COLOR);
             },
             () -> {
                 RenderSystem.depthMask(true);
