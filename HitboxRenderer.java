@@ -106,8 +106,8 @@ public final class HitboxRenderer {
 
                     float[] color = rgba(fillColor);
 
-                    VertexConsumer consumer =
-                            consumers.getBuffer(RenderLayer.getDebugQuads());
+VertexConsumer consumer =
+        consumers.getBuffer(RenderLayer.getDebugFilledBox());
 
                     VertexRendering.drawFilledBox(
                             matrices,
