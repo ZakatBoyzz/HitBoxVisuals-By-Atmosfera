@@ -9,7 +9,12 @@ base {
     archivesName = project.archives_base_name
 }
 
-repositories {}
+repositories {
+    maven {
+        url = 'https://maven.fabricmc.net/'
+    }
+    mavenCentral()
+}
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -18,10 +23,35 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
+sourceSets {
+    main {
+        java {
+            srcDirs = ['.']
+            include 'HitboxConfig.java'
+            include 'HitboxRenderer.java'
+            include 'HitboxSettingsScreen.java'
+            include 'HitboxVisualsClient.java'
+        }
+
+        resources {
+            srcDirs = []
+        }
+    }
+}
+
 processResources {
     inputs.property 'version', project.version
-    filesMatching('fabric.mod.json') {
+
+    from('fabric.mod.json') {
         expand 'version': project.version
+    }
+
+    from('en_us.json') {
+        into 'assets/hitboxvisuals/lang'
+    }
+
+    from('ru_ru.json') {
+        into 'assets/hitboxvisuals/lang'
     }
 }
 
