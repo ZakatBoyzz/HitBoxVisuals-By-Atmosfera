@@ -9,7 +9,6 @@ import net.minecraft.client.render.VertexRendering;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
@@ -52,7 +51,7 @@ public final class HitboxRenderer {
                     continue;
                 }
 
-                // Hide invisible players unless at least one armor slot is occupied.
+                // Keep the invisible-player filtering fix.
                 boolean invisible = target.isInvisible();
                 boolean wearingArmor = hasAnyArmor(target);
 
@@ -60,7 +59,7 @@ public final class HitboxRenderer {
                     continue;
                 }
 
-                // Never draw a hitbox when blocks completely obstruct the view.
+                // Do not render hitboxes through fully obstructing blocks.
                 if (!hasClearViewToAnySample(client, target, cameraPos)) {
                     continue;
                 }
@@ -82,7 +81,8 @@ public final class HitboxRenderer {
                         -cameraPos.z
                 );
 
-                // Draw only the hitbox overlay; do not change player-model rendering.
+                // Draw the fill using the same depth-aware debug layer as before
+                // is intentionally avoided here; use the normal filled-box layer.
                 if (settings.fillEnabled) {
                     VertexConsumer fillConsumer =
                             consumers.getBuffer(RenderLayer.getDebugFilledBox());
